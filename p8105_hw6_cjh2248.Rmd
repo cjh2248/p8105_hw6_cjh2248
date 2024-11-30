@@ -1,11 +1,93 @@
 ---
 title: "P8105 HW6"
 output: github_document
-date: "2024-10-09"
+date: "2024-11-29"
 ---
 
 
 ```{r setup, include=FALSE}
 library(tidyverse)
+library(dplyr)
+library(purrr)
+library(modelr)
+```
+
+# Problem 1 
+
+Setting Up 
+```{r}
+weather_df = 
+  rnoaa::meteo_pull_monitors(
+    c("USW00094728"),
+    var = c("PRCP", "TMIN", "TMAX"), 
+    date_min = "2017-01-01",
+    date_max = "2017-12-31") %>%
+  mutate(
+    name = recode(id, USW00094728 = "CentralPark_NY"),
+    tmin = tmin / 10,
+    tmax = tmax / 10) %>%
+  select(name, id, everything())
+```
+
+Creating the Function first. 
+```{r}
+boot_fun = function(df) {
+  boot_samp = modelr::bootstrap(df, 1)
+  
+  boot_data = boot_samp[[1]]
+  
+  lm_fit = lm(tmax ~ tmin, data = boot_data)
+  
+  glance_out = broom::glance(lm_fit)
+  tidy_out = broom::tidy(lm_fit)
+  
+  return(tibble(
+    r_squared = glance_out[['r.squared']], 
+    log_est = log(tidy_out[['estimate']][1] * tidy_out[['estimate']][2])  
+  ))
+}
+```
+
+5000 Bootstrap Samples. 
+```{r}
+boot_straps = 
+  weather_df %>%
+  modelr::bootstrap(n = 5000)
+```
+
+```{r}
+boot_results = 
+  boot_straps %>% 
+  mutate(
+    results = map(strap, function(boot_samp) {
+      lm_fit = lm(tmax ~ tmin, data = boot_samp)
+      
+      glance_out = broom::glance(lm_fit)
+      tidy_out = broom::tidy(lm_fit)
+      
+      return(tibble(
+        r_squared = glance_out[['r.squared']], 
+        log_est = log(tidy_out[['estimate']][1] * tidy_out[['estimate']][2])  
+      ))
+    })) %>% 
+  unnest(results) 
+```
+
+Histogram: R Squared 
+```{r}
+boot_results %>%
+  ggplot(aes(x = r_squared)) +
+  geom_histogram(binwidth = 0.001, fill = "lightblue", color = "black") +
+  labs(title = "Distribution of R-squared from Bootstrap Samples",
+       x = "R-squared", y = "Frequency")
+```
+
+Histogram: Log 
+```{r}
+boot_results %>%
+  ggplot(aes(x = log_est)) +
+  geom_histogram(binwidth = 0.02, fill = "lightgreen", color = "black") +
+  labs(title = "Distribution of log(beta0 * beta1) from Bootstrap Samples",
+       x = "log(beta0 * beta1)", y = "Frequency")
 ```
 
