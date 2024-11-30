@@ -10,6 +10,7 @@ library(tidyverse)
 library(dplyr)
 library(purrr)
 library(modelr)
+library(broom)
 ```
 
 # Problem 1 
@@ -89,5 +90,70 @@ boot_results %>%
   geom_histogram(binwidth = 0.02, fill = "lightgreen", color = "black") +
   labs(title = "Distribution of log(beta0 * beta1) from Bootstrap Samples",
        x = "log(beta0 * beta1)", y = "Frequency")
+```
+
+# Problem 2 
+
+```{r}
+homicide_df = read_csv("data/homicide-data.csv")
+
+homicide_df = homicide_df %>%
+  mutate(city_state = paste(city, state, sep = ", ")) %>% 
+  filter(city_state != "Dallas, TX",
+         city_state != "Phoenix, AZ",
+         city_state != "Kansas City, MO",
+         city_state != "Tulsa, AL",
+         victim_race == "White" | victim_race == "Black") %>% 
+  mutate(
+    resolved = as.numeric(disposition == "Closed by arrest"),
+    victim_age = as.numeric(victim_age)
+  ) 
+```
+
+Regression Model and CI Calculations 
+```{r}
+baltimore_model = 
+  homicide_df %>% 
+  filter(city_state == "Baltimore, MD") %>% 
+  glm(resolved ~ victim_age + victim_sex + victim_race, data = ., family = binomial())
+
+baltimore_model %>% 
+  broom::tidy() %>% 
+  mutate(OR = exp(estimate),  
+         conf.low = exp(estimate - 1.96 * std.error), 
+         conf.high = exp(estimate + 1.96 * std.error)) %>%  
+  filter(term == "victim_sexMale") %>%  
+  select(term, OR, conf.low, conf.high) 
+```
+
+```{r}
+city_model_results = homicide_df %>% 
+  nest(data = -city_state) %>%  
+  mutate(
+    models = map(data, ~ glm(resolved ~ victim_age + victim_sex + victim_race, data = .x, family = binomial())),  
+    results = map(models, broom::tidy)  
+  ) %>% 
+  select(-data, -models) %>%  
+  unnest(results) %>% 
+  mutate(
+    OR = exp(estimate), 
+    conf.low = exp(estimate - 1.96 * std.error),  
+    conf.high = exp(estimate + 1.96 * std.error) 
+  ) %>% 
+  filter(term == "victim_sexMale") %>%  
+  select(city_state, term, OR, conf.low, conf.high)  
+```
+
+Plotting the Results 
+```{r}
+city_model_results %>% 
+  mutate(city_state = fct_reorder(city_state, OR)) %>% 
+  ggplot(aes(x = city_state, y = OR)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  coord_flip() +
+  labs(title = "Odds Ratios for Solving Homicides (Male vs. Female)", 
+       x = "City, State", 
+       y = "Odds Ratio")
 ```
 
