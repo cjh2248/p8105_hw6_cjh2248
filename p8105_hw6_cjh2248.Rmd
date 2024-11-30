@@ -1,0 +1,11 @@
+---
+title: "P8105 HW6"
+output: github_document
+date: "2024-10-09"
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+```
+
