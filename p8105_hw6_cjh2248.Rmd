@@ -88,12 +88,13 @@ Histogram: Log
 boot_results %>%
   ggplot(aes(x = log_est)) +
   geom_histogram(binwidth = 0.02, fill = "lightgreen", color = "black") +
-  labs(title = "Distribution of log(beta0 * beta1) from Bootstrap Samples",
+  labs(title = "Distribution of log from Bootstrap Samples",
        x = "log(beta0 * beta1)", y = "Frequency")
 ```
 
 # Problem 2 
 
+Importing the data. 
 ```{r}
 homicide_df = read_csv("data/homicide-data.csv")
 
@@ -157,3 +158,54 @@ city_model_results %>%
        y = "Odds Ratio")
 ```
 
+The plot showcases the odds ratios and confidence intervals based off the city. It is categorized based by male and female homicides. We can observe that male victims are less likely to have their case solved as opposed to female victims. Additionally, another key feature is the top three cities:  Albuquerque, NM, Stockton, CA, and Fresno, CA having the highest odds ratios from male to female as opposed to other cities. 
+
+# Problem 3 
+
+```{r}
+birthweight_df = read_csv("data/birthweight.csv")
+
+fit <- lm(bwt ~ gaweeks + momage + smoken + parity + mrace + wtgain, data = birthweight_df)
+
+birthweight_df %>% 
+  modelr::add_predictions(fit) %>% 
+  modelr::add_residuals(fit) %>% 
+  ggplot(aes(x = pred, y = resid)) +
+  geom_point() +
+  labs(x = "Fitted Values", y = "Residuals")
+
+```
+
+This model depicts numerous variables such as: gaweeks (gestational age), momage (mothers age), smoken (average cigarettes while pregnant), parity (number of births), mrace (race), and wtgain (weight gain). 
+
+
+```{r}
+cv_df <- crossv_mc(birthweight_df, 100) %>%  
+  mutate(
+    train = map(train, as_tibble),
+    test = map(test, as_tibble)
+  ) %>% 
+  mutate(
+    model1 = map(train, ~ lm(bwt ~ blength + gaweeks, data = .x)),
+    model2 = map(train, ~ lm(bwt ~ bhead * blength * babysex, data = .x)),
+    proposed_model = map(train, ~ lm(bwt ~ gaweeks + momage + smoken + parity + mrace + wtgain, data = .x))
+  ) %>% 
+  mutate(
+    rmse_model1 = map2_dbl(model1, test, ~ rmse(model = .x, data = .y)),
+    rmse_model2 = map2_dbl(model2, test, ~ rmse(model = .x, data = .y)),
+    rmse_proposed_model = map2_dbl(proposed_model, test, ~ rmse(model = .x, data = .y))
+  )
+```
+
+Model 1 represents bwt (birthweight) ~ blength (baby's length in cm)  + gaweeks (gestational age in weeks). Model 2 showcases bwt (birthweight) ~ bhead (baby's head in cm) * blength (baby's length in cm) * babysex (sex at birth). For this comparison model, I used RSME (root mean squared error) as a form of predictor. Low RSME means that there is more predictive ability. 
+ 
+Comparisons
+```{r}
+cv_df %>% 
+  select(starts_with("rmse")) %>% 
+  pivot_longer(everything(), names_to = "model", values_to = "rmse", names_prefix = "rmse_") %>% 
+  ggplot(aes(x = model, y = rmse)) +
+  geom_violin()
+```
+
+From our findings, we can conclude that these are three different types of shapes of the spread. Model 2 has potential to mimic the proposed model that we have constructed, however, the only problem lies in the rsme. Having low rsme indicates that it is a bad predictor and therefore the one shown above needs more adjustments made to mimic the perfect model. 
